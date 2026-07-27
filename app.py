@@ -1,3 +1,5 @@
+import streamlit
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -14,6 +16,12 @@ def init_session_state():
         st.session_state.reset_pending = False
 
 init_session_state()
+
+# --- Funzione per rimuovere una spesa specifica --- #
+def remove_expense(index):
+    if index in st.session_state.expenses_df.index:
+        st.session_state.expenses_df = st.session_state.expenses_df.drop(index=index).reset_index(drop=True)
+        st.rerun()
 
 # --- Funzione per generare i dati del grafico (robusta) --- #
 def generate_pie_chart_data():
@@ -88,7 +96,13 @@ def display_summary():
         st.write(f"**Stipendio Rimanente:** €{remaining_salary:.2f}")
         
         st.markdown("#### Dettaglio Spese:")
-        st.dataframe(st.session_state.expenses_df)
+        for idx, row in st.session_state.expenses_df.iterrows():
+            col_name, col_cost, col_remove = st.columns([3, 1.5, 0.5])
+            col_name.write(f"• {row['Nome Spesa']}")
+            col_cost.write(f"€{row['Costo Spesa']:.2f}")
+            if col_remove.button("-", key=f"remove_expense_{idx}"):
+                remove_expense(idx)
+                break
         
         display_pie_chart()
     else:
@@ -100,47 +114,46 @@ st.title("Programma di Gestione delle Spese")
 
 # --- 1. Gestione Stipendio --- #
 st.header("1. Gestione Stipendio Mensile")
-salary_input_value = st.number_input(
-    'Stipendio Mensile:', 
-    min_value=0.0, 
-    value=st.session_state.monthly_salary if st.session_state.monthly_salary is not None else 0.0,
-    disabled=st.session_state.salary_set,
-    format="%.2f"
-)
 
-if st.button('Imposta Stipendio', disabled=st.session_state.salary_set):
-    if salary_input_value > 0:
-        st.session_state.monthly_salary = salary_input_value
-        st.session_state.salary_set = True
-        st.success(f"Stipendio mensile impostato a: €{st.session_state.monthly_salary:.2f}")
-        st.rerun()
-    else:
-        st.error("Inserisci uno stipendio valido superiore a zero.")
+with st.form("salary_form"):
+    salary_input_value = st.number_input(
+        'Stipendio Mensile:', 
+        min_value=0.0, 
+        value=st.session_state.monthly_salary if st.session_state.monthly_salary is not None else 0.0,
+        disabled=st.session_state.salary_set,
+        format="%.2f"
+    )
+    submitted_salary = st.form_submit_button('Imposta Stipendio', disabled=st.session_state.salary_set)
+
+    if submitted_salary:
+        if salary_input_value > 0:
+            st.session_state.monthly_salary = salary_input_value
+            st.session_state.salary_set = True
+            st.success(f"Stipendio mensile impostato a: €{st.session_state.monthly_salary:.2f}")
+            st.rerun()
+        else:
+            st.error("Inserisci uno stipendio valido superiore a zero.")
 
 # --- 2. Gestione Spese --- #
 st.header("2. Gestione Spese")
 col1, col2 = st.columns(2)
 
 with col1:
-    expense_name = st.text_input('Nome Spesa:', placeholder='Es. Affitto')
-    expense_cost = st.number_input('Costo Spesa:', min_value=0.0, value=0.0, format="%.2f")
+    with st.form("expense_form", clear_on_submit=True):
+        expense_name = st.text_input('Nome Spesa:', placeholder='Es. Affitto')
+        expense_cost = st.number_input('Costo Spesa:', min_value=0.0, value=0.0, format="%.2f")
+        submitted_expense = st.form_submit_button('Aggiungi Spesa')
+
+        if submitted_expense:
+            if expense_name and expense_cost > 0:
+                new_row = pd.DataFrame([{'Nome Spesa': expense_name, 'Costo Spesa': expense_cost}])
+                st.session_state.expenses_df = pd.concat([st.session_state.expenses_df, new_row], ignore_index=True)
+                st.rerun()
+            else:
+                st.error("Inserisci nome e costo validi.")
 
 with col2:
     st.markdown("<br>", unsafe_allow_html=True) # Spazio per allineare
-    if st.button('Aggiungi Spesa'):
-        if expense_name and expense_cost > 0:
-            new_row = pd.DataFrame([{'Nome Spesa': expense_name, 'Costo Spesa': expense_cost}])
-            st.session_state.expenses_df = pd.concat([st.session_state.expenses_df, new_row], ignore_index=True)
-            st.rerun()
-        else:
-            st.error("Inserisci nome e costo validi.")
-
-    if st.button('Rimuovi Spesa'):
-        if expense_name in st.session_state.expenses_df['Nome Spesa'].values:
-            st.session_state.expenses_df = st.session_state.expenses_df[st.session_state.expenses_df['Nome Spesa'] != expense_name].reset_index(drop=True)
-            st.rerun()
-        else:
-            st.error("Spesa non trovata.")
 
 # --- 3. Riepilogo --- #
 st.header("3. Riepilogo e Grafico")
