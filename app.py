@@ -97,18 +97,15 @@ def display_summary():
         
         st.markdown("#### Dettaglio Spese:")
         for idx, row in st.session_state.expenses_df.iterrows():
-            col_name, col_cost, col_remove = st.columns([4.2, 1.2, 0.5], gap="small")
-            col_name.markdown(
-                f"<div style='padding:6px 0; font-size:14px; font-weight:700; color:#ffffff;'>• {row['Nome Spesa']}</div>",
+            col_details, col_remove = st.columns([6, 1], gap="small")
+            col_details.markdown(
+                f"<div style='display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; font-size:14px; font-weight:700; color:#ffffff; white-space:nowrap;'><span>• {row['Nome Spesa']}</span><span>€{row['Costo Spesa']:.2f}</span></div>",
                 unsafe_allow_html=True
             )
-            col_cost.markdown(
-                f"<div style='padding:6px 0; text-align:right; font-size:14px; font-weight:700; color:#ffffff;'>€{row['Costo Spesa']:.2f}</div>",
-                unsafe_allow_html=True
-            )
-            if col_remove.button("−", key=f"remove_expense_{idx}", use_container_width=True):
-                remove_expense(idx)
-                break
+            with col_remove:
+                if st.button("−", key=f"remove_expense_{idx}", use_container_width=True):
+                    remove_expense(idx)
+                    break
         
         display_pie_chart()
     else:
