@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import base64
-import io
 
 # --- Funzioni di Inizializzazione dello Stato --- #
 def init_session_state():
@@ -17,51 +15,62 @@ def init_session_state():
 
 init_session_state()
 
-# --- Funzione per generare i dati del grafico (riutilizzabile) --- #
+# --- Funzione per generare i dati del grafico (robusta) --- #
 def generate_pie_chart_data():
-    if st.session_state.expenses_df.empty or st.session_state.monthly_salary is None:
+    if st.session_state.monthly_salary is None:
         return None, None, None
-
-    # Filtra le spese con costo positivo per evitare errori nel grafico a torta
-    valid_expenses = st.session_state.expenses_df[st.session_state.expenses_df['Costo Spesa'] > 0]
-    if valid_expenses.empty:
-        return None, None, None
-
+    
+    # Crea una copia per lavorare in sicurezza
+    df = st.session_state.expenses_df.copy()
+    
+    # Forza la colonna Costo Spesa a essere numerica, mettendo 0 dove ci sono errori
+    df['Costo Spesa'] = pd.to_numeric(df['Costo Spesa'], errors='coerce').fillna(0)
+    
+    # Filtra solo spese positive
+    valid_expenses = df[df['Costo Spesa'] > 0].copy()
+    
     total_expenses = valid_expenses['Costo Spesa'].sum()
     chart_data = valid_expenses[['Nome Spesa', 'Costo Spesa']].copy()
     remaining_salary = st.session_state.monthly_salary - total_expenses
 
     if remaining_salary > 0:
-        chart_data = pd.concat([
-            chart_data,
-            pd.DataFrame([{'Nome Spesa': 'Stipendio Rimanente', 'Costo Spesa': remaining_salary}])
-        ], ignore_index=True)
+        remaining_df = pd.DataFrame([{'Nome Spesa': 'Stipendio Rimanente', 'Costo Spesa': remaining_salary}])
+        chart_data = pd.concat([chart_data, remaining_df], ignore_index=True)
+    
+    # Rimuove eventuali righe nulle residue e verifica che ci siano dati
+    chart_data = chart_data.dropna()
+    if chart_data.empty or chart_data['Costo Spesa'].sum() <= 0:
+        return None, total_expenses, remaining_salary
 
     return chart_data, total_expenses, remaining_salary
 
-# --- Funzione per il Grafico a Torta --- #
+# --- Funzione per il Grafico a Torta (blindata) --- #
 def display_pie_chart():
     chart_data, _, _ = generate_pie_chart_data()
-    if chart_data is None:
-        st.write("Nessuna spesa valida per il grafico o stipendio non impostato.")
+    
+    if chart_data is None or chart_data.empty:
+        st.write("Dati insufficienti per generare il grafico.")
         return
 
-    fig1, ax1 = plt.subplots(figsize=(10, 8))
-    wedges, texts, autotexts = ax1.pie(chart_data['Costo Spesa'],
-                                      labels=chart_data['Nome Spesa'],
-                                      autopct='%1.1f%%',
-                                      startangle=90,
-                                      pctdistance=0.85,
-                                      wedgeprops=dict(width=0.3) # Renderizza come ciambella
-                                      )
-
-    # Rende le percentuali bianche per una migliore leggibilità su sfondi scuri
-    for autotext in autotexts:
-        autotext.set_color('white')
-
-    ax1.axis('equal') # Assicura che la torta sia disegnata come un cerchio.
-    plt.title('Percentuale Spese in Relazione allo Stipendio (con rimanenza)', fontsize=16)
-    st.pyplot(fig1)
+    try:
+        fig1, ax1 = plt.subplots(figsize=(10, 8))
+        wedges, texts, autotexts = ax1.pie(
+            chart_data['Costo Spesa'], 
+            labels=chart_data['Nome Spesa'], 
+            autopct='%1.1f%%', 
+            startangle=90,
+            pctdistance=0.85,
+            wedgeprops=dict(width=0.3)
+        )
+        
+        for autotext in autotexts:
+            autotext.set_color('black') # Cambiato in black per leggibilità standard
+            
+        ax1.axis('equal')
+        plt.title('Distribuzione Spese vs Stipendio', fontsize=16)
+        st.pyplot(fig1)
+    except Exception as e:
+        st.error(f"Errore nella visualizzazione del grafico: {e}")
 
 # --- Funzione per il Riepilogo --- #
 def display_summary():
@@ -77,135 +86,82 @@ def display_summary():
 
         st.write(f"**Totale Spese:** €{total_expenses:.2f}")
         st.write(f"**Stipendio Rimanente:** €{remaining_salary:.2f}")
+        
         st.markdown("#### Dettaglio Spese:")
-        st.dataframe(st.session_state.expenses_df.style.set_properties(**{'text-align': 'left'}).set_table_styles([dict(selector='th', props=[('text-align', 'left')])]))
-
-        # Visualizza il grafico a torta
+        st.dataframe(st.session_state.expenses_df)
+        
         display_pie_chart()
-
     else:
         st.write("Nessuna spesa registrata.")
         st.write(f"**Stipendio Rimanente:** €{st.session_state.monthly_salary:.2f}")
 
-# --- Layout dell'Applicazione Streamlit --- #
+# --- Layout dell'Applicazione --- #
 st.title("Programma di Gestione delle Spese")
 
-# --- 1. Gestione Stipendio Mensile --- #
+# --- 1. Gestione Stipendio --- #
 st.header("1. Gestione Stipendio Mensile")
-st.markdown("Inserisci il tuo stipendio mensile. Una volta confermato, non potrà essere modificato per la sessione corrente (fino al reset).")
-
 salary_input_value = st.number_input(
-    'Stipendio Mensile:',
-    min_value=0.0,
+    'Stipendio Mensile:', 
+    min_value=0.0, 
     value=st.session_state.monthly_salary if st.session_state.monthly_salary is not None else 0.0,
     disabled=st.session_state.salary_set,
     format="%.2f"
 )
 
 if st.button('Imposta Stipendio', disabled=st.session_state.salary_set):
-    if salary_input_value > 0 and st.session_state.monthly_salary is None:
+    if salary_input_value > 0:
         st.session_state.monthly_salary = salary_input_value
         st.session_state.salary_set = True
         st.success(f"Stipendio mensile impostato a: €{st.session_state.monthly_salary:.2f}")
-        st.rerun() # Ricarica per aggiornare l'interfaccia
-    elif st.session_state.monthly_salary is not None:
-        st.warning(f"Lo stipendio mensile è già stato impostato a: €{st.session_state.monthly_salary:.2f}. Non può essere modificato.")
+        st.rerun()
     else:
-        st.error("Per favore, inserisci uno stipendio valido e maggiore di zero.")
+        st.error("Inserisci uno stipendio valido superiore a zero.")
 
 # --- 2. Gestione Spese --- #
 st.header("2. Gestione Spese")
-st.markdown("Qui puoi inserire, modificare o rimuovere le tue spese. La tabella sottostante verrà aggiornata automaticamente.")
-
 col1, col2 = st.columns(2)
 
 with col1:
-    expense_name = st.text_input('Nome Spesa:', placeholder='Es. Affitto, Cibo, Trasporti')
+    expense_name = st.text_input('Nome Spesa:', placeholder='Es. Affitto')
     expense_cost = st.number_input('Costo Spesa:', min_value=0.0, value=0.0, format="%.2f")
 
 with col2:
-    st.write(" ") # Spazio per allineare i pulsanti
-    st.write(" ")
-    if st.button('Aggiungi Spesa', key='add_expense_btn'):
+    st.markdown("<br>", unsafe_allow_html=True) # Spazio per allineare
+    if st.button('Aggiungi Spesa'):
         if expense_name and expense_cost > 0:
-            new_expense = pd.DataFrame([{'Nome Spesa': expense_name, 'Costo Spesa': expense_cost}])
-            st.session_state.expenses_df = pd.concat([st.session_state.expenses_df, new_expense], ignore_index=True)
-            st.success(f"Spesa '{expense_name}' aggiunta.")
+            new_row = pd.DataFrame([{'Nome Spesa': expense_name, 'Costo Spesa': expense_cost}])
+            st.session_state.expenses_df = pd.concat([st.session_state.expenses_df, new_row], ignore_index=True)
             st.rerun()
         else:
-            st.error("Per favor, inserisci un nome e un costo valido per la spesa.")
+            st.error("Inserisci nome e costo validi.")
 
-    if st.button('Modifica Spesa', key='modify_expense_btn'):
-        if expense_name and expense_cost > 0 and expense_name in st.session_state.expenses_df['Nome Spesa'].values:
-            st.session_state.expenses_df.loc[st.session_state.expenses_df['Nome Spesa'] == expense_name, 'Costo Spesa'] = expense_cost
-            st.success(f"Spesa '{expense_name}' modificata.")
-            st.rerun()
-        else:
-            st.error("Per favore, inserisci un nome di spesa esistente e un costo valido da modificare.")
-
-    if st.button('Rimuovi Spesa', key='remove_expense_btn'):
-        if expense_name and expense_name in st.session_state.expenses_df['Nome Spesa'].values:
+    if st.button('Rimuovi Spesa'):
+        if expense_name in st.session_state.expenses_df['Nome Spesa'].values:
             st.session_state.expenses_df = st.session_state.expenses_df[st.session_state.expenses_df['Nome Spesa'] != expense_name].reset_index(drop=True)
-            st.success(f"Spesa '{expense_name}' rimossa.")
             st.rerun()
         else:
-            st.error("Per favore, inserisci un nome di spesa esistente da rimuovere.")
+            st.error("Spesa non trovata.")
 
-# --- 3. Riepilogo e Grafico a Torta --- #
-st.header("3. Riepilogo e Grafico a Torta")
-st.markdown("Il riepilogo delle spese e il grafico a torta verranno aggiornati automaticamente dopo ogni modifica.")
+# --- 3. Riepilogo --- #
+st.header("3. Riepilogo e Grafico")
 display_summary()
 
-# --- 4. Esporta Dati in CSV --- #
-st.header("4. Esporta Dati in CSV")
-st.markdown("Scarica un file CSV con il riepilogo delle tue spese e le relative percentuali.")
-
+# --- 4. Esporta --- #
+st.header("4. Esporta Dati")
 if not st.session_state.expenses_df.empty and st.session_state.monthly_salary is not None:
-    summary_data = st.session_state.expenses_df.copy()
-    total_expenses = summary_data['Costo Spesa'].sum()
-    remaining_salary = st.session_state.monthly_salary - total_expenses
+    csv = st.session_state.expenses_df.to_csv(index=False).encode('utf-8')
+    st.download_button("Scarica CSV Spese", csv, "spese.csv", "text/csv")
 
-    # Calcola le percentuali relative alle spese totali e allo stipendio rimanente
-    summary_data['Percentuale_su_Totale_Spese'] = (summary_data['Costo Spesa'] / total_expenses * 100).round(2) if total_expenses > 0 else 0
-
-    summary_rows = []
-    summary_rows.append({'Nome Spesa': 'Totale Spese', 'Costo Spesa': total_expenses, 'Percentuale_su_Totale_Spese': None})
-    summary_rows.append({'Nome Spesa': 'Stipendio Rimanente', 'Costo Spesa': remaining_salary, 'Percentuale_su_Totale_Spese': (remaining_salary / st.session_state.monthly_salary * 100).round(2) if st.session_state.monthly_salary > 0 else 0})
-    summary_rows.append({'Nome Spesa': 'Stipendio Mensile', 'Costo Spesa': st.session_state.monthly_salary, 'Percentuale_su_Totale_Spese': 100.0})
-
-    summary_df_extra = pd.DataFrame(summary_rows)
-    final_df = pd.concat([summary_data, summary_df_extra], ignore_index=True)
-
-    csv_string = final_df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="Scarica CSV Spese",
-        data=csv_string,
-        file_name="resoconto_spese.csv",
-        mime="text/csv"
-    )
-else:
-    st.write("Nessuna spesa o stipendio non impostato per l'esportazione.")
-
-# --- 5. Reset Mese --- #
+# --- 5. Reset --- #
 st.header("5. Reset Mese")
-st.markdown("Questo pulsante ti permette di azzerare tutte le spese e lo stipendio mensile per ricominciare da capo.")
-
-if st.button('Reset Mese', type='secondary'):
+if st.button('Reset Mese'):
     st.session_state.reset_pending = True
 
 if st.session_state.reset_pending:
-    st.warning("Sei sicuro di voler procedere?")
-    col_confirm, col_cancel = st.columns(2)
-    with col_confirm:
-        if st.button('Sì, Azzera Tutto', type='primary'):
-            st.session_state.monthly_salary = None
-            st.session_state.expenses_df = pd.DataFrame(columns=['Nome Spesa', 'Costo Spesa'])
-            st.session_state.salary_set = False
-            st.session_state.reset_pending = False
-            st.success("Mese azzerato! Inserisci il nuovo stipendio e le spese.")
-            st.rerun()
-    with col_cancel:
-        if st.button('No, Annulla'):
-            st.session_state.reset_pending = False
-            st.info("Operazione di reset annullata.")
-            st.rerun()
+    st.warning("Sei sicuro di voler azzerare tutto?")
+    if st.button('Sì, conferma'):
+        st.session_state.monthly_salary = None
+        st.session_state.expenses_df = pd.DataFrame(columns=['Nome Spesa', 'Costo Spesa'])
+        st.session_state.salary_set = False
+        st.session_state.reset_pending = False
+        st.rerun()
