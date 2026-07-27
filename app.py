@@ -36,7 +36,7 @@ def generate_pie_chart_data():
             chart_data,
             pd.DataFrame([{'Nome Spesa': 'Stipendio Rimanente', 'Costo Spesa': remaining_salary}])
         ], ignore_index=True)
-    
+
     return chart_data, total_expenses, remaining_salary
 
 # --- Funzione per il Grafico a Torta --- #
@@ -47,14 +47,14 @@ def display_pie_chart():
         return
 
     fig1, ax1 = plt.subplots(figsize=(10, 8))
-    wedges, texts, autotexts = ax1.pie(chart_data['Costo Spesa'], 
-                                      labels=chart_data['Nome Spesa'], 
-                                      autopct='%1.1f%%', 
+    wedges, texts, autotexts = ax1.pie(chart_data['Costo Spesa'],
+                                      labels=chart_data['Nome Spesa'],
+                                      autopct='%1.1f%%',
                                       startangle=90,
                                       pctdistance=0.85,
                                       wedgeprops=dict(width=0.3) # Renderizza come ciambella
                                       )
-    
+
     # Rende le percentuali bianche per una migliore leggibilità su sfondi scuri
     for autotext in autotexts:
         autotext.set_color('white')
@@ -79,7 +79,7 @@ def display_summary():
         st.write(f"**Stipendio Rimanente:** €{remaining_salary:.2f}")
         st.markdown("#### Dettaglio Spese:")
         st.dataframe(st.session_state.expenses_df.style.set_properties(**{'text-align': 'left'}).set_table_styles([dict(selector='th', props=[('text-align', 'left')])]))
-        
+
         # Visualizza il grafico a torta
         display_pie_chart()
 
@@ -95,8 +95,8 @@ st.header("1. Gestione Stipendio Mensile")
 st.markdown("Inserisci il tuo stipendio mensile. Una volta confermato, non potrà essere modificato per la sessione corrente (fino al reset).")
 
 salary_input_value = st.number_input(
-    'Stipendio Mensile:', 
-    min_value=0.0, 
+    'Stipendio Mensile:',
+    min_value=0.0,
     value=st.session_state.monthly_salary if st.session_state.monthly_salary is not None else 0.0,
     disabled=st.session_state.salary_set,
     format="%.2f"
@@ -107,7 +107,7 @@ if st.button('Imposta Stipendio', disabled=st.session_state.salary_set):
         st.session_state.monthly_salary = salary_input_value
         st.session_state.salary_set = True
         st.success(f"Stipendio mensile impostato a: €{st.session_state.monthly_salary:.2f}")
-        st.experimental_rerun() # Ricarica per aggiornare l'interfaccia
+        st.rerun() # Ricarica per aggiornare l'interfaccia
     elif st.session_state.monthly_salary is not None:
         st.warning(f"Lo stipendio mensile è già stato impostato a: €{st.session_state.monthly_salary:.2f}. Non può essere modificato.")
     else:
@@ -125,21 +125,21 @@ with col1:
 
 with col2:
     st.write(" ") # Spazio per allineare i pulsanti
-    st.write(" ") 
+    st.write(" ")
     if st.button('Aggiungi Spesa', key='add_expense_btn'):
         if expense_name and expense_cost > 0:
             new_expense = pd.DataFrame([{'Nome Spesa': expense_name, 'Costo Spesa': expense_cost}])
             st.session_state.expenses_df = pd.concat([st.session_state.expenses_df, new_expense], ignore_index=True)
             st.success(f"Spesa '{expense_name}' aggiunta.")
-            st.experimental_rerun()
+            st.rerun()
         else:
-            st.error("Per favore, inserisci un nome e un costo valido per la spesa.")
+            st.error("Per favor, inserisci un nome e un costo valido per la spesa.")
 
     if st.button('Modifica Spesa', key='modify_expense_btn'):
         if expense_name and expense_cost > 0 and expense_name in st.session_state.expenses_df['Nome Spesa'].values:
             st.session_state.expenses_df.loc[st.session_state.expenses_df['Nome Spesa'] == expense_name, 'Costo Spesa'] = expense_cost
             st.success(f"Spesa '{expense_name}' modificata.")
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("Per favore, inserisci un nome di spesa esistente e un costo valido da modificare.")
 
@@ -147,7 +147,7 @@ with col2:
         if expense_name and expense_name in st.session_state.expenses_df['Nome Spesa'].values:
             st.session_state.expenses_df = st.session_state.expenses_df[st.session_state.expenses_df['Nome Spesa'] != expense_name].reset_index(drop=True)
             st.success(f"Spesa '{expense_name}' rimossa.")
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("Per favore, inserisci un nome di spesa esistente da rimuovere.")
 
@@ -167,12 +167,12 @@ if not st.session_state.expenses_df.empty and st.session_state.monthly_salary is
 
     # Calcola le percentuali relative alle spese totali e allo stipendio rimanente
     summary_data['Percentuale_su_Totale_Spese'] = (summary_data['Costo Spesa'] / total_expenses * 100).round(2) if total_expenses > 0 else 0
-    
+
     summary_rows = []
     summary_rows.append({'Nome Spesa': 'Totale Spese', 'Costo Spesa': total_expenses, 'Percentuale_su_Totale_Spese': None})
     summary_rows.append({'Nome Spesa': 'Stipendio Rimanente', 'Costo Spesa': remaining_salary, 'Percentuale_su_Totale_Spese': (remaining_salary / st.session_state.monthly_salary * 100).round(2) if st.session_state.monthly_salary > 0 else 0})
     summary_rows.append({'Nome Spesa': 'Stipendio Mensile', 'Costo Spesa': st.session_state.monthly_salary, 'Percentuale_su_Totale_Spese': 100.0})
-    
+
     summary_df_extra = pd.DataFrame(summary_rows)
     final_df = pd.concat([summary_data, summary_df_extra], ignore_index=True)
 
@@ -203,9 +203,9 @@ if st.session_state.reset_pending:
             st.session_state.salary_set = False
             st.session_state.reset_pending = False
             st.success("Mese azzerato! Inserisci il nuovo stipendio e le spese.")
-            st.experimental_rerun()
+            st.rerun()
     with col_cancel:
         if st.button('No, Annulla'):
             st.session_state.reset_pending = False
             st.info("Operazione di reset annullata.")
-            st.experimental_rerun()
+            st.rerun()
