@@ -97,10 +97,16 @@ def display_summary():
         
         st.markdown("#### Dettaglio Spese:")
         for idx, row in st.session_state.expenses_df.iterrows():
-            col_name, col_cost, col_remove = st.columns([3, 1.5, 0.5])
-            col_name.write(f"• {row['Nome Spesa']}")
-            col_cost.write(f"€{row['Costo Spesa']:.2f}")
-            if col_remove.button("-", key=f"remove_expense_{idx}"):
+            col_name, col_cost, col_remove = st.columns([4.2, 1.2, 0.5], gap="small")
+            col_name.markdown(
+                f"<div style='padding:6px 0; font-size:14px; color:#1f2937;'>• {row['Nome Spesa']}</div>",
+                unsafe_allow_html=True
+            )
+            col_cost.markdown(
+                f"<div style='padding:6px 0; text-align:right; font-size:14px; font-weight:600; color:#0f766e;'>€{row['Costo Spesa']:.2f}</div>",
+                unsafe_allow_html=True
+            )
+            if col_remove.button("−", key=f"remove_expense_{idx}", use_container_width=True):
                 remove_expense(idx)
                 break
         
